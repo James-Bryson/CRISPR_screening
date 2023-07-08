@@ -1,0 +1,154 @@
+---
+title: "Converting fastq txt files into list of spacer sequences"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+
+library(dplyr)
+library(DescTools)
+
+#Reading in the gz files using explicit file paths
+seqs_F <- read.csv("/Users/fcw257/Desktop/QC_sequencing/FastQ_QC/Undetermined_from_220407_M06391_0131_000000000-DF8YF_L001_ds.7ee8b84bccc64ecf8ed7856259c70b81/Undetermined_S0_L001_R1_001.fastq.gz")
+seqs_R <- read.csv("/Users/fcw257/Desktop/QC_sequencing/FastQ_QC/Undetermined_from_220407_M06391_0131_000000000-DF8YF_L001_ds.7ee8b84bccc64ecf8ed7856259c70b81/Undetermined_S0_L001_R2_001.fastq.gz")
+
+#The sequences of interest are every 4 lines starting at 1, the following aims to fill the list y with spacer sequences of the desired length (20nt for controls or 23nt)
+i = 1
+spacer_F = list()
+lenF = nrow(seqs_F) -1
+#frac = 0.1
+
+#Scan through the forward strand dataframe recording positions of substring (direct repeat) in sequences.
+while (i < lenF) {
+  pos = unlist(gregexpr('TAATTTCTACTCTTGTAGAT', seqs_F[i, 1]))
+  #If two direct repeats are found then update the spacer as the intervening substring
+  if (length(pos) == 2) {
+    spacer = (substr(seqs_F[i, 1], pos[1]+20, (pos[2]-1)))
+    #If the spacer is either 20 or 23nt then append it to the list y.
+    if (nchar(spacer) == 20 | nchar(spacer) == 23)  {
+      spacer_F = c(spacer_F, spacer)
+    }
+  }
+  #Including a basic optional counter to get a sense of run progress.
+  i = i + 4
+  #if (i > frac * (len - 1)) {
+    #print(frac)
+    #frac = frac + 0.1
+    #}
+}
+
+spacer_F
+
+#Scan through the reverse strand dataframe recording positions of substring (direct repeat) in sequences.
+i = 1
+spacer_R = list()
+lenR = nrow(seqs_R) - 1
+#frac = 0.1
+while (i < lenR) {
+  pos = unlist(gregexpr('ATCTACAAGAGTAGAAATTA', seqs_R[i, 1]))
+  if (length(pos) == 2) {
+    spacer = (substr(seqs_R[i, 1], pos[1]+20, (pos[2]-1)))
+    if (nchar(spacer) == 20 | nchar(spacer) == 23) {
+      spacer_R = c(spacer_R, spacer)
+    }
+  }
+  i = i + 4
+  #if (i > frac * (len - 1)) {
+    #print(frac)
+    #frac = frac + 0.1
+    #}
+}
+
+spacer_R
+  
+#Convert spacer_F list into a dataframe to enable grouping by spacer sequences.
+df_F = do.call(rbind.data.frame, spacer_F)
+head(df_F)
+
+#Convert spacer_R list into a dataframe to enable grouping by spacer sequences.
+df_R = do.call(rbind.data.frame, spacer_R)
+head(df_R)
+
+#Rename the columns containing spacers
+names(df_F)[1] <- "spacers" 
+names(df_R)[1] <- "spacers" 
+
+#Grouping the dataframes by spacer sequence then calculating frequency (dplyr for pipes)
+
+grouped_df_F = df_F %>%
+  group_by(spacers) %>%
+  summarize(Freq=n())
+
+grouped_df_R = df_R %>%
+  group_by(spacers) %>%
+  summarize(Freq=n())
+
+#----------THE FOLLOWING IS VERY SPECIFIC TO THIS LIBRARY RUN--------
+
+#Converting csvs of relevant spacers with identifiers into dataframes
+controls = read.csv2('/Users/fcw257/Desktop/Lund group postdoc/Research/Lund group projects/snoRNA CRISPR screen/Human/Cas12 screen control gRNAs from Liu et al.csv')
+genes = read.csv("/Users/fcw257/Desktop/Lund group postdoc/Research/Lund group projects/snoRNA CRISPR screen/Human/unique_gene_targeting_gRNAs.csv")
+snoRNAs = read.csv("/Users/fcw257/Desktop/Lund group postdoc/Research/Lund group projects/snoRNA CRISPR screen/Human/unique_snoRNA_targeting_gRNAs.csv")
+
+#Binding the dataframes together
+combined_spacers_F = rbind(controls, genes, snoRNAs)
+
+#Updating the name for the spacers column to 'spacers'
+names(combined_spacers_F)[2] <- "spacers"
+
+#Trimming the empty spaces around the spacers
+combined_spacers_F$spacers <- trimws(combined_spacers_F$spacers, which = c("left"))
+
+#Generating lookup table containing reverse complement of spacers
+require(Biostrings)
+combined_spacers_R = combined_spacers_F
+combined_spacers_R$spacers <- sapply(combined_spacers_R$spacers, function(x) as.character(reverseComplement(DNAString(x))));
+head(combined_spacers_R)
+
+#Performing inner join between 'lookup' table and spacers from sequencing to only retain spacers (with counts) that are found in the lookup table.
+innerjoined_F <- inner_join(combined_spacers_F, grouped_df_F, by='spacers')
+print(sum(innerjoined_F$Freq))
+
+innerjoined_R <- inner_join(combined_spacers_R, grouped_df_R, by='spacers')
+print(sum(innerjoined_R$Freq))
+
+
+vec_F = innerjoined_F$Freq
+vec_R = innerjoined_R$Freq
+#Using gini function with vector of frequences for unique spacers (DescTools)
+Gini(vec_F)
+Gini(vec_R)
+
+
+library(ggplot2)
+print(ggplot() + geom_density(aes(innerjoined_F$Freq)) + theme_bw())
+print(ggplot() + geom_histogram(aes(innerjoined_F$Freq), binwidth = 40) + theme_bw() + xlab('gRNA count') + ylab('Frequency'))
+
+hist(log(innerjoined_F$Freq), breaks = 100, main = "Histogram of spacer frequencies", xlab = expression("Count per spacer Log"[2]), ylab = "Frequency")
+median(innerjoined_F$Freq)
+
+#sorted_clean_spacers = sort()
+arranged_innerjoined_F = arrange(innerjoined_F, Freq)
+
+```
+
+```{r}
+cumfreq0 = c(0, cumsum(arranged_innerjoined_F$Freq))
+plot(cumfreq0, main = "Calculating Gini coefficient", xlab = "Spacers ordered by frequency", ylab = "Culmulative frequency")
+abline(0, length(spacer_F)/1484)
+abline(h = 0)
+abline(v = 1484)
+# join the points
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+
