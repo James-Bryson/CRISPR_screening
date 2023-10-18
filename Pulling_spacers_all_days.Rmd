@@ -1,0 +1,234 @@
+---
+title: "Pulling_spacers_all_days"
+output: html_document
+date: "2023-10-17"
+---
+
+```{r}
+library(dplyr)
+library(DescTools)
+
+#Reading in the gz files using explicit file paths
+#Day 1 reads
+seqs_d1_F <- read.csv("/Users/fcw257/Desktop/QC_sequencing/snoRNA_growth_11_10_23-400485286/day_1/day-1_S1_L001_R1_001.fastq.gz")
+seqs_d1_R <- read.csv("/Users/fcw257/Desktop/QC_sequencing/snoRNA_growth_11_10_23-400485286/day_1/day-1_S1_L001_R2_001.fastq.gz")
+
+#Day 3 reads
+seqs_d3_F <- read.csv("/Users/fcw257/Desktop/QC_sequencing/snoRNA_growth_11_10_23-400485286/day_3/day-3_S2_L001_R1_001.fastq.gz")
+seqs_d3_R <- read.csv("/Users/fcw257/Desktop/QC_sequencing/snoRNA_growth_11_10_23-400485286/day_3/day-3_S2_L001_R2_001.fastq.gz")
+
+#Day 5 reads
+seqs_d5_F <- read.csv("/Users/fcw257/Desktop/QC_sequencing/snoRNA_growth_11_10_23-400485286/day_5/day-5_S3_L001_R1_001.fastq.gz")
+seqs_d5_R <- read.csv("/Users/fcw257/Desktop/QC_sequencing/snoRNA_growth_11_10_23-400485286/day_5/day-5_S3_L001_R2_001.fastq.gz")
+```
+
+```{r}
+#This code block is for extracting the spacer sequences from sequencing reads
+
+#The following is for extracting the gRNAs for day 1
+
+#The sequences of interest are every 4 lines starting at 1, the following aims to fill the list y with spacer sequences of the desired length (20nt for controls or 23nt)
+i = 1
+spacer_d1_F = list()
+lenF = nrow(seqs_d1_F) -1
+#frac = 0.1
+
+#Scan through the forward strand dataframe recording positions of substring (direct repeat) in sequences.
+while (i < lenF) {
+  pos = unlist(gregexpr('TAATTTCTACTCTTGTAGAT', seqs_d1_F[i, 1]))
+  #If two direct repeats are found then update the spacer as the intervening substring
+  if (length(pos) == 2) {
+    spacer = (substr(seqs_d1_F[i, 1], pos[1]+20, (pos[2]-1)))
+    #If the spacer is either 20 or 23nt then append it to the list y.
+    if (nchar(spacer) == 20 | nchar(spacer) == 23)  {
+      spacer_d1_F = c(spacer_d1_F, spacer)
+    }
+  }
+  #Including a basic optional counter to get a sense of run progress.
+  i = i + 4
+  #if (i > frac * (len - 1)) {
+    #print(frac)
+    #frac = frac + 0.1
+    #}
+}
+
+#The following is for extracting the gRNAs for day 3
+
+#The sequences of interest are every 4 lines starting at 1, the following aims to fill the list y with spacer sequences of the desired length (20nt for controls or 23nt)
+i = 1
+spacer_d3_F = list()
+lenF = nrow(seqs_d3_F) -1
+#frac = 0.1
+
+#Scan through the forward strand dataframe recording positions of substring (direct repeat) in sequences.
+while (i < lenF) {
+  pos = unlist(gregexpr('TAATTTCTACTCTTGTAGAT', seqs_d3_F[i, 1]))
+  #If two direct repeats are found then update the spacer as the intervening substring
+  if (length(pos) == 2) {
+    spacer = (substr(seqs_d3_F[i, 1], pos[1]+20, (pos[2]-1)))
+    #If the spacer is either 20 or 23nt then append it to the list y.
+    if (nchar(spacer) == 20 | nchar(spacer) == 23)  {
+      spacer_d3_F = c(spacer_d3_F, spacer)
+    }
+  }
+  #Including a basic optional counter to get a sense of run progress.
+  i = i + 4
+  #if (i > frac * (len - 1)) {
+    #print(frac)
+    #frac = frac + 0.1
+    #}
+}
+
+#The following is for extracting the gRNAs for day 5
+
+#The sequences of interest are every 4 lines starting at 1, the following aims to fill the list y with spacer sequences of the desired length (20nt for controls or 23nt)
+i = 1
+spacer_d5_F = list()
+lenF = nrow(seqs_d5_F) -1
+#frac = 0.1
+
+#Scan through the forward strand dataframe recording positions of substring (direct repeat) in sequences.
+while (i < lenF) {
+  pos = unlist(gregexpr('TAATTTCTACTCTTGTAGAT', seqs_d5_F[i, 1]))
+  #If two direct repeats are found then update the spacer as the intervening substring
+  if (length(pos) == 2) {
+    spacer = (substr(seqs_d5_F[i, 1], pos[1]+20, (pos[2]-1)))
+    #If the spacer is either 20 or 23nt then append it to the list y.
+    if (nchar(spacer) == 20 | nchar(spacer) == 23)  {
+      spacer_d5_F = c(spacer_d5_F, spacer)
+    }
+  }
+  #Including a basic optional counter to get a sense of run progress.
+  i = i + 4
+  #if (i > frac * (len - 1)) {
+    #print(frac)
+    #frac = frac + 0.1
+    #}
+}
+```
+
+```{r}
+#This section will convert the lists from each day into a dataframe
+
+#Convert spacer_d1_F list into a dataframe to enable grouping by spacer sequences.
+df_d1_F = do.call(rbind.data.frame, spacer_d1_F)
+head(df_d1_F)
+
+#Convert spacer_d3_F list into a dataframe to enable grouping by spacer sequences.
+df_d3_F = do.call(rbind.data.frame, spacer_d3_F)
+head(df_d3_F)
+
+#Convert spacer_d5_F list into a dataframe to enable grouping by spacer sequences.
+df_d5_F = do.call(rbind.data.frame, spacer_d5_F)
+head(df_d5_F)
+```
+
+```{r}
+#Grouping the dataframes by spacer sequence then calculating frequency (dplyr for pipes)
+
+#Rename the columns containing spacers
+names(df_d1_F)[1] <- "spacers"
+names(df_d3_F)[1] <- "spacers"
+names(df_d5_F)[1] <- "spacers"
+
+#Grouping the dataframes by spacer sequence then calculating frequency (dplyr for pipes)
+
+#Day 1
+grouped_df_d1_F = df_d1_F %>%
+  group_by(spacers) %>%
+  summarize(Freq=n())
+
+#Day 3
+grouped_df_d3_F = df_d3_F %>%
+  group_by(spacers) %>%
+  summarize(Freq=n())
+
+#Day 5
+grouped_df_d5_F = df_d5_F %>%
+  group_by(spacers) %>%
+  summarize(Freq=n())
+```
+
+```{r}
+#This section pulls the gRNAs with identifiers and sequences and combines them into a dataframe
+
+#Converting csvs of relevant spacers with identifiers into dataframes
+controls = read.csv2('/Users/fcw257/Desktop/Lund group postdoc/Research/Lund group projects/snoRNA CRISPR screen/Human/Cas12 screen control gRNAs from Liu et al.csv')
+genes = read.csv("/Users/fcw257/Desktop/Lund group postdoc/Research/Lund group projects/snoRNA CRISPR screen/Human/unique_gene_targeting_gRNAs.csv")
+snoRNAs = read.csv("/Users/fcw257/Desktop/Lund group postdoc/Research/Lund group projects/snoRNA CRISPR screen/Human/unique_snoRNA_targeting_gRNAs.csv")
+
+#Binding the dataframes together
+combined_spacers_F = rbind(controls, genes, snoRNAs)
+
+#Updating the name for the spacers column to 'spacers'
+names(combined_spacers_F)[2] <- "spacers"
+
+#Trimming the empty spaces around the spacers
+combined_spacers_F$spacers <- trimws(combined_spacers_F$spacers, which = c("left"))
+```
+
+
+```{r}
+#This section performs inner join between 'lookup' table and spacers from sequencing to only retain spacers (with counts) sequences that are found in the lookup table.
+
+#Day 1
+innerjoined_d1_F <- inner_join(combined_spacers_F, grouped_df_d1_F, by='spacers')
+
+#Day 3
+innerjoined_d3_F <- inner_join(combined_spacers_F, grouped_df_d3_F, by='spacers')
+
+#Day 5
+innerjoined_d5_F <- inner_join(combined_spacers_F, grouped_df_d5_F, by='spacers')
+```
+
+
+```{r}
+#This section merges the dataframes from each time point into a single wide dataframe format before outputing and saving a tsv.
+
+#Select relevant columns
+
+#Day1
+selected_d1_df = innerjoined_d1_F %>%
+  select(1, 3)
+
+#Day 3
+selected_d3_df = innerjoined_d3_F %>%
+  select(1, 3)
+
+#Day 5
+selected_d5_df = innerjoined_d5_F %>%
+  select(1, 3)
+
+#Combining dataframes, with empty rows becoming NA
+temp_joined = full_join(selected_d1_df, selected_d3_df, by = "Identifier")
+joined_df_all_days = full_join(temp_joined, selected_d5_df, by = "Identifier")
+
+# Create a mapping of original names to more meaningful names
+name_mapping <- c("Identifier" = "Identifier", "Freq.x" = "day_1_count", 
+                  "Freq.y" = "day_3_count", "Freq" = "day_5_count")
+
+# Rename specific columns using the mapping
+colnames(joined_df_all_days) <- name_mapping[colnames(joined_df_all_days)]
+
+#Export the joined dataframe to the parent directory
+write.table(joined_df_all_days, file = "/Users/fcw257/Desktop/QC_sequencing/snoRNA_growth_11_10_23-400485286/joined_df_all_days.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+```
+
+```{r}
+#This section converts the combined dataframe to ensure the count data is log2 transformed
+
+#Convert the data into log2 scale
+df_all_days_log2 <- joined_df_all_days %>%
+  mutate_at(vars(day_1_count, day_3_count, day_5_count), log2)
+
+# Create a mapping of old names to new names
+name_mapping <- c("Identifier" = "Identifier", "day_1_count" = "day_1_log2", 
+                  "day_3_count" = "day_3_log2", "day_5_count" = "day_5_log2")
+
+# Rename specific columns using the mapping
+colnames(df_all_days_log2) <- name_mapping[colnames(df_all_days_log2)]
+
+#Export the log2 dataframe to the parent directory
+write.table(df_all_days_log2, file = "/Users/fcw257/Desktop/QC_sequencing/snoRNA_growth_11_10_23-400485286/df_all_days_log2.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+```
+
