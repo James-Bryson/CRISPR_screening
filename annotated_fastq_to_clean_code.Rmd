@@ -1,0 +1,169 @@
+---
+title: "Sequncing analysis code"
+output: html_document
+date: "2024-06-21"
+---
+
+This chunk can take a while
+```{bash}
+#This bash chunk extracts all fastq, converts to FASTA format and deposits in cleaned_J
+
+#Set working directory for current project
+cd "/Users/fcw257/Desktop/Lund group postdoc/NGS sequencing analysis/JBR_04_01_2023-28311304/FASTQ_Generation_2024-01-04_22_26_21Z-45457437"
+
+#Create 'cleaned_J' directory if it doesn't exist
+mkdir -p cleaned_J
+
+#For current experiment with samples J1-24, change as appropriate
+for suffix in J{1..24}; do
+
+    #Initialise new output file based on the suffix
+    output_file="cleaned_J/concatenated_${suffix}.txt"
+    
+    # Clear the file before appending new content (especially if code run previously)
+    > "$output_file"
+    
+    # Loop through directories with current suffix
+    for dir in "${suffix}"*; do
+        # Extract the name of the directory
+        dir_name=$(basename "$dir")
+        for file in "$dir"/*.fastq.gz; do
+            # Extract sequences and append to output file
+            gunzip -c "$file" | awk 'NR % 4 == 2' >> "$output_file"
+        done
+    done
+done
+```
+
+```{r}
+library(dplyr)
+```
+
+
+```{r}
+# This chunk compiles the spacers from the library to serve as a lookup table
+
+# Converting csvs of relevant spacers with identifiers into dataframes
+controls = read.csv2('/Users/fcw257/Desktop/Lund group postdoc/Research/Lund group projects/snoRNA CRISPR screen/Human/Cas12 screen control gRNAs from Liu et al.csv')
+genes = read.csv("/Users/fcw257/Desktop/Lund group postdoc/Research/Lund group projects/snoRNA CRISPR screen/Human/unique_gene_targeting_gRNAs.csv")
+snoRNAs = read.csv("/Users/fcw257/Desktop/Lund group postdoc/Research/Lund group projects/snoRNA CRISPR screen/Human/unique_snoRNA_targeting_gRNAs.csv")
+
+# Binding the dataframes together
+combined_spacers_F = rbind(controls, genes, snoRNAs)
+# Removing leading or trailing whitespace strings
+combined_spacers_F[] <- lapply(combined_spacers_F, function(x) trimws(as.character(x)))
+```
+
+This chunk can take a while
+```{r}
+# This section of code reads in the fasta files and converts them to dataframes of spacer counts
+
+# Initialise empty list for files
+files <- list()
+
+# Loop through files matching the pattern Ji*.fastq.gz
+for (i in 1:24) {
+  # Updating the filenames list with each file name
+  files <- c(files, paste0("cleaned_J/concatenated_J", i, ".txt")) 
+}
+
+# Loop through each file, recording count (1 to number of files) for use in subsequent df naming
+for (count in seq_along(files)) {
+  # Current iteration of file name
+  file <- files[[count]]
+  # Read the FASTA format file into list of strings
+  seqs <- readLines(file)
+  # Extract positions where direct repeats are found within each string
+  pos <- lapply(gregexpr("TAATTTCTACTCTTGTAGAT", seqs), as.numeric)
+  # For each element in pos list check there are 2 positions and the difference of start positions is 40 or 43
+  eval_pos <- sapply(pos, function(pair) length(pair) == 2 & (pair[2] - pair[1] == 43 | pair[2] - pair[1] == 40))
+  # Generate a vector of spacers sliced from strings based on positions, which evaluated to true
+  spacers <- Map(function(p, s) substr(s, p[1] + 20, p[2] - 1), pos[eval_pos], seqs[eval_pos]) %>% unlist()
+  # Filter only for spacers that are found in lookup table of spacers in library
+  filtered_spacers <- spacers[spacers %in% combined_spacers_F$sequence]
+  # Convert filtered spacers into count table
+  grouped_table <- table(filtered_spacers)
+  # Generate name for dataframe to be generated in current iteration of loop
+  df_name <- paste0("df_", count)
+  # Convert the table into a dataframe and asign current iteration's name
+  assign(df_name, as.data.frame(grouped_table))
+}
+
+# Create a list of data frame names (assuming they are already generated)
+list_of_dfs <- lapply(1:24, function(i) get(paste0("df_", i)))
+```
+
+```{r}
+#Merge the data frames with all = TRUE to keep rows with no counts
+results_retaining_zeros <- Reduce(function(x, y) {
+  #This takes the list of dataframes and merges them on filtered_spacers column one by one (removing rows with empty cells)
+  merge(x, y, by = "filtered_spacers", all = TRUE)
+}, list_of_dfs)
+
+#Merge the data frames with all = FALSE to remove rows with no counts
+results_without_zeros <- Reduce(function(x, y) {
+  #This takes the list of dataframes and merges them on filtered_spacers column one by one (keeping empty cells)
+  merge(x, y, by = "filtered_spacers", all = FALSE)
+}, list_of_dfs)
+
+# Generate the list of sample names
+sample_names <- c('R1D1', 'R1D3', 'R1D5', 'R1D7', 'R1D9', 'R1D11', 'R1D13', 'R1D15',
+                  'R2D1', 'R2D3', 'R2D5', 'R2D7', 'R2D9', 'R2D11', 'R2D13', 'R2D15',
+                  'R3D1', 'R3D3', 'R3D5', 'R3D7', 'R3D9', 'R3D11', 'R3D13', 'R3D15')
+
+# Update the column names using corresponding samples names
+colnames(results_retaining_zeros) <- c('sequence', sample_names)
+colnames(results_without_zeros) <- c('sequence', sample_names)
+```
+
+
+```{r}
+# Append a new column by inner_join between combined spacers and results tables
+results_retaining_zeros <- inner_join(combined_spacers_F, results_retaining_zeros)
+results_without_zeros <- inner_join(combined_spacers_F, results_without_zeros)
+
+# The datasets can be cleaned to remove the sequence column and keep only identifiers
+results_retaining_zeros <- results_retaining_zeros[-2]
+results_without_zeros <- results_without_zeros[-2]
+```
+
+```{r}
+#Writing the dataframes to respective tsv files
+write.table(results_retaining_zeros, file = "cleaned_J/J_filtered_counts_retaining_zeros.tsv", 
+            sep = "\t",row.names = FALSE)
+
+write.table(results_without_zeros, file = "cleaned_J/J_filtered_counts_without_zeros.tsv", 
+            sep = "\t",row.names = FALSE)
+```
+
+OPTIONAL CHUNK TO CHECK DATAFRAME REMEMBER TO MATCH FOR COUNTS WITH/WO ZEROS
+```{r}
+# Reading in the csv files
+orig_file <- read.csv("cleaned_J/J_filtered_spacer_count_table.tsv", sep = "\t")
+new_file <- read.csv("cleaned_J/J_filtered_counts_without_zeros.tsv", sep = "\t")
+
+# Earlier version had the spacer rather than Identifier so repeat appending identifier
+orig_file_annotated <- inner_join(combined_spacers_F, orig_file, 
+                                  by = c("sequence" = "spacers"))
+
+#Cleaning up the original file
+orig_file_clean <- orig_file_annotated[-2]
+
+# Sort the earlier generated and newly generated dataset
+orig_file_sorted <- arrange(orig_file_clean, Identifier)
+new_file_sorted <- arrange(new_file, Identifier)
+
+# Remove the first column to just keep the counts
+orig_except_first <- orig_file_sorted[, -1]
+new_except_first <- new_file_sorted[, -1]
+
+#Sanity checking the identical function for original and new files
+identical(orig_except_first, orig_except_first)
+identical(new_except_first, new_except_first)
+
+#Checking that the new file matches the original file
+identical(orig_except_first, new_except_first)
+```
+
+
+
